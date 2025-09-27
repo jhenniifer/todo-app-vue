@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-pink-50;
+  font-family: "Quicksand", Arial, sans-serif;
+  background-color: #ffe0f0;
+  background-image: radial-gradient(circle, #fbb6ce 1.5px, transparent 1.5px),
+    radial-gradient(circle, #fbb6ce 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+}
+
+h1,
+h2,
+h3,
+.font-cursive {
+  font-family: "Pacifico", cursive, "Quicksand", Arial, sans-serif;
+}
