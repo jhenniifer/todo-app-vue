@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import AddIcon from '@heroicons/vue/24/solid/PlusIcon'
-import StarIcon from '@heroicons/vue/24/solid/StarIcon'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { PlusIcon as AddIcon, StarIcon, EyeIcon, PencilSquareIcon, TrashIcon } from '@heroicons/vue/24/solid'
+import AddTodoForm from '../components/AddTodoForm.vue'
+import EditTodoForm from '../components/EditTodoForm.vue'
+import { useToast } from '../composables/toast'
 
 const TODOS_PER_PAGE = 10
 
@@ -10,8 +12,10 @@ const page = ref(1)
 const search = ref('')
 const status = ref<'all' | 'complete' | 'incomplete'>('all')
 const showAdd = ref(false)
+const editingTodoId = ref<number | null>(null)
 
 const queryClient = useQueryClient()
+const { showSuccess, showError } = useToast()
 
 const { data: todos, isLoading, isError, error } = useQuery({
   queryKey: ['todos'],
@@ -19,6 +23,47 @@ const { data: todos, isLoading, isError, error } = useQuery({
     const res = await fetch('https://jsonplaceholder.typicode.com/todos')
     if (!res.ok) throw new Error('Failed to fetch todos')
     return res.json()
+  },
+})
+
+// Add Todo mutation
+const addMutation = useMutation({
+  mutationFn: async (newTodo: { title: string; completed: boolean }) => {
+    const res = await fetch('https://jsonplaceholder.typicode.com/todos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newTodo, userId: 1 }),
+    })
+    if (!res.ok) throw new Error('Failed to add todo')
+    return res.json()
+  },
+  onSuccess: (created) => {
+    queryClient.setQueryData(['todos'], (old: any[] = []) => [created, ...(old || [])])
+    showSuccess('Todo added')
+  },
+  onError: (err: any) => {
+    showError(err?.message || 'Failed to add todo')
+  },
+})
+
+// Edit Todo mutation
+const editMutation = useMutation({
+  mutationFn: async (updatedTodo: any) => {
+    const res = await fetch(`https://jsonplaceholder.typicode.com/todos/${updatedTodo.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: updatedTodo.title, completed: updatedTodo.completed }),
+    })
+    if (!res.ok) throw new Error('Failed to update todo')
+    return res.json()
+  },
+  onSuccess: (data, variables) => {
+    queryClient.setQueryData(['todos'], (old: any[] = []) => (old || []).map((t) => (t.id === variables.id ? { ...t, ...data } : t)))
+    editingTodoId.value = null
+    showSuccess('Todo updated')
+  },
+  onError: (err: any) => {
+    showError(err?.message || 'Failed to update todo')
   },
 })
 
@@ -48,8 +93,28 @@ function handleStatusChange(e: Event) {
 }
 
 async function handleDeleteTodo(id: number) {
-  await fetch(`https://jsonplaceholder.typicode.com/todos/${id}`, { method: 'DELETE' })
-  queryClient.setQueryData(['todos'], (old: any[] = []) => (old || []).filter((t) => t.id !== id))
+  try {
+    const res = await fetch(`https://jsonplaceholder.typicode.com/todos/${id}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error('Failed to delete todo')
+    queryClient.setQueryData(['todos'], (old: any[] = []) => (old || []).filter((t) => t.id !== id))
+    showSuccess('Todo deleted')
+  } catch (err: any) {
+    showError(err?.message || 'Failed to delete todo')
+  }
+}
+
+async function handleAddTodo(payload: { title: string; completed: boolean }) {
+  await addMutation.mutateAsync(payload)
+}
+
+async function handleEditTodo(payload: any) {
+  await editMutation.mutateAsync(payload)
+}
+
+function onConfirmDelete(id: number) {
+  if (globalThis.confirm('Are you sure you want to delete this todo?')) {
+    handleDeleteTodo(id)
+  }
 }
 </script>
 
@@ -67,6 +132,8 @@ async function handleDeleteTodo(id: number) {
         <AddIcon class="w-5 h-5" aria-hidden="true" /> Add Todo
       </button>
     </h1>
+
+    <AddTodoForm v-if="showAdd" @add="handleAddTodo" @close="showAdd = false" />
 
     <!-- Controls -->
     <div class="flex flex-col md:flex-row gap-2 mb-4 items-center">
@@ -95,36 +162,44 @@ async function handleDeleteTodo(id: number) {
     <template v-else>
       <ul class="mb-4 divide-y">
         <li v-if="currentTodos.length === 0" class="py-4 text-center text-gray-500">No todos found.</li>
-        <li
-          v-for="todo in currentTodos"
-          :key="todo.id"
-          class="py-2 flex items-center justify-between"
-        >
-          <span class="flex-1 min-w-0">
-            <span :class="todo.completed ? 'line-through text-gray-400' : ''">{{ todo.title }}</span>
-            <span
-              class="ml-2 px-2 py-0.5 rounded text-xs"
-              :class="todo.completed ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'"
-            >
-              {{ todo.completed ? 'Completed' : 'Incomplete' }}
+        <li v-for="todo in currentTodos" :key="todo.id" class="py-2 flex items-center justify-between">
+          <template v-if="editingTodoId === todo.id">
+            <EditTodoForm :todo="todo" @edit="handleEditTodo" @close="editingTodoId = null" />
+          </template>
+          <template v-else>
+            <span class="flex-1 min-w-0">
+              <span :class="todo.completed ? 'line-through text-gray-400' : ''">{{ todo.title }}</span>
+              <span
+                class="ml-2 px-2 py-0.5 rounded text-xs"
+                :class="todo.completed ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'"
+              >
+                {{ todo.completed ? 'Completed' : 'Incomplete' }}
+              </span>
             </span>
-          </span>
-          <div class="flex gap-4 ml-4 shrink-0">
-            <RouterLink
-              :to="`/todos/${todo.id}`"
-              class="text-pink-600 hover:text-pink-800 text-lg font-semibold rounded-full p-2 transition-transform hover:scale-110 bg-pink-100 shadow"
-              aria-label="View details"
-            >
-              👁️
-            </RouterLink>
-            <button
-              class="text-pink-700 hover:text-pink-900 text-lg font-semibold rounded-full p-2 transition-transform hover:scale-110 bg-pink-200 shadow"
-              @click="handleDeleteTodo(todo.id)"
-              aria-label="Delete todo"
-            >
-              🗑️
-            </button>
-          </div>
+            <div class="flex gap-4 ml-4 shrink-0">
+              <RouterLink
+                :to="`/todos/${todo.id}`"
+                class="text-pink-600 hover:text-pink-800 text-lg font-semibold rounded-full p-2 transition-transform hover:scale-110 bg-pink-100 shadow"
+                aria-label="View details"
+              >
+                <EyeIcon class="w-5 h-5" aria-hidden="true" />
+              </RouterLink>
+              <button
+                class="text-purple-600 hover:text-purple-800 text-lg font-semibold rounded-full p-2 transition-transform hover:scale-110 bg-purple-100 shadow"
+                @click="editingTodoId = todo.id"
+                aria-label="Edit todo"
+              >
+                <PencilSquareIcon class="w-5 h-5" aria-hidden="true" />
+              </button>
+              <button
+                class="text-pink-700 hover:text-pink-900 text-lg font-semibold rounded-full p-2 transition-transform hover:scale-110 bg-pink-200 shadow"
+                @click="onConfirmDelete(todo.id)"
+                aria-label="Delete todo"
+              >
+                <TrashIcon class="w-5 h-5" aria-hidden="true" />
+              </button>
+            </div>
+          </template>
         </li>
       </ul>
 
