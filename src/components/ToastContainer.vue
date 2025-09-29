@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useToast } from '../composables/toast'
+import type { ToastItem } from '../composables/toast'
 
 const { toasts, remove } = useToast()
-const items = computed(() => toasts)
+const items = computed<ToastItem[]>(() => toasts.value)
 </script>
 
 <template>
   <div class="fixed bottom-4 right-4 z-50 space-y-2 w-80">
     <div
-      v-for="t in items"
-      :key="t.id"
+      v-for="(t, index) in items"
+      :key="index"
       class="flex items-start gap-2 rounded shadow p-3 text-sm border"
       :class="{
         'bg-green-50 text-green-800 border-green-200': t.type === 'success',

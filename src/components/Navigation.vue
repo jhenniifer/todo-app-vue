@@ -9,8 +9,8 @@
       </RouterLink>
     </div>
     <div class="md:ml-auto flex items-center gap-2">
-      <template v-if="auth.user">
-        <span class="text-sm text-pink-700">{{ auth.user?.email }}</span>
+      <template v-if="auth.user?.value">
+        <span class="text-sm text-pink-700">{{ auth.user?.value?.email }}</span>
         <button
           class="px-3 py-1 text-sm rounded bg-white border border-pink-300 text-pink-700 hover:bg-pink-50"
           @click="onLogout"
