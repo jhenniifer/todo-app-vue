@@ -1,4 +1,4 @@
-import { inject, ref, type App } from 'vue'
+import { inject, ref, type App } from "vue";
 
 export type AuthUser = { email: string } | null
 
